@@ -1,0 +1,1 @@
+"""FastAPI sentiment platform package."""

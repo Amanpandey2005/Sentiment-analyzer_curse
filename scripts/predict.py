@@ -1,30 +1,27 @@
+"""Run one local prediction against a serialized model."""
+
 from __future__ import annotations
 
 import argparse
-import json
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from sentiment_analyzer.model import SentimentModel
+import joblib
 
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Predict sentiment for one e-commerce review.")
-    parser.add_argument("--model", default="models/sentiment_model.json", help="Path to trained model JSON.")
-    parser.add_argument("--text", required=True, help="Review text to classify.")
-    return parser.parse_args()
+from ml.preprocessing.text import normalize_text
 
 
 def main() -> None:
-    args = parse_args()
-    model = SentimentModel.load(args.model)
-    result = {
-        "text": args.text,
-        "sentiment": model.predict(args.text),
-        "probabilities": model.predict_proba(args.text),
-    }
-    print(json.dumps(result, indent=2))
+    parser = argparse.ArgumentParser(description="Predict sentiment for one review")
+    parser.add_argument("--model", default="ml/saved_models/sentiment_model.joblib")
+    parser.add_argument("--text", required=True)
+    args = parser.parse_args()
+
+    artifact = joblib.load(args.model)
+    pipeline = artifact["pipeline"]
+    text = normalize_text(args.text)
+    probabilities = pipeline.predict_proba([text])[0]
+    probability_map = dict(zip(pipeline.classes_, probabilities))
+    sentiment = max(probability_map, key=probability_map.get)
+    print({"sentiment": sentiment, "probabilities": probability_map})
 
 
 if __name__ == "__main__":

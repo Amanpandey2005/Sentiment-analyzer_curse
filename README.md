@@ -1,74 +1,114 @@
-# AI-Powered E-Commerce Sentiment Analyzer
+# Dockerized ML Sentiment Analysis Platform
 
-A lightweight sentiment analysis pipeline for e-commerce reviews. The core model is a standard-library multinomial Naive Bayes classifier, so it can train and run without external dependencies. Optional API and scraping dependencies are listed in `requirements.txt`.
+A production-style MLOps and DevOps portfolio project for customer review sentiment analysis. It includes a FastAPI inference service, scikit-learn training pipeline, Streamlit analytics dashboard, PostgreSQL persistence, Redis rate limiting, Prometheus/Grafana monitoring, Docker Compose, NGINX, GitHub Actions CI/CD, and Terraform AWS infrastructure.
+
+## Architecture
+
+```text
+Client / Browser
+  -> NGINX reverse proxy
+    -> Streamlit dashboard
+    -> FastAPI REST API
+      -> TF-IDF + Logistic Regression model
+      -> PostgreSQL predictions table
+      -> Redis rate limiter
+      -> Prometheus /metrics
+Prometheus -> Grafana dashboards
+GitHub Actions -> AWS ECR -> EC2 Docker Compose deployment
+```
 
 ## Project Structure
 
 ```text
-sentiment_analyzer/
-  model.py             # Trainable sentiment classifier
-  preprocessing.py     # Review text cleaning/tokenization
-  metrics.py           # Accuracy, precision, recall, F1
-  api_clients.py       # Optional OpenAI-compatible sentiment client
-scripts/
-  train_model.py       # Train and save a model
-  evaluate.py          # Evaluate a saved model
-  predict.py           # Predict sentiment for one review
-data/
-  sample_reviews.csv   # Small starter dataset
-models/
-  .gitkeep             # Saved models go here
+app/                    FastAPI app, auth, database, middleware, services, metrics
+ml/                     Training, preprocessing, evaluation, saved model artifacts
+dashboard/              Streamlit analytics dashboard
+tests/                  Unit, API, integration, and Docker config tests
+nginx/                  Reverse proxy and HTTPS-ready configuration
+monitoring/             Prometheus and Grafana provisioning
+scripts/                EC2 bootstrap, deploy, and health-check scripts
+terraform/              AWS EC2, ECR, S3, IAM, CloudWatch, security groups
+.github/workflows/      CI/CD pipeline
+docker-compose.yml      Local full-stack deployment
+docker-compose.prod.yml EC2 production deployment
+Dockerfile              Multi-stage production image
 ```
 
-## Quick Start
+## Features
 
-Install dashboard dependencies:
+- Single and batch sentiment prediction: positive, negative, neutral
+- CSV upload endpoint and dashboard workflow
+- Review summaries generated during inference
+- PostgreSQL storage for every prediction
+- Analytics API and Streamlit dashboard with distribution, confidence, trends, filters, and top reviews
+- JWT token utility, Redis-backed rate limiting, structured JSON logging
+- Prometheus metrics for request count, latency, errors, and prediction counts
+- Grafana dashboard provisioning with application, CPU, and memory panels
+- Multi-stage Docker builds with non-root runtime user and health checks
+- GitHub Actions pipeline for tests, linting, ECR image push, and EC2 deployment
+- Terraform templates for AWS infrastructure
 
-```powershell
+## Run Locally
+
+```bash
+docker compose up --build
+```
+
+Services:
+
+- Dashboard: `http://localhost`
+- API: `http://localhost/api`
+- Direct API docs: `http://localhost:8000/docs`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000` with `admin/admin`
+- cAdvisor: `http://localhost:8080`
+
+The API trains `ml/saved_models/sentiment_model.joblib` from `data/sample_reviews.csv` automatically if the artifact is missing.
+
+## API Examples
+
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"review_text":"Excellent quality and fast delivery."}'
+```
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/analytics
+curl http://localhost:8000/metrics
+```
+
+More endpoint details are in [docs/API.md](docs/API.md).
+
+## Train and Evaluate Locally
+
+```bash
+python -m ml.training.train --data data/sample_reviews.csv --model-out ml/saved_models/sentiment_model.joblib
+python -m ml.evaluation.evaluate --data data/sample_reviews.csv --model ml/saved_models/sentiment_model.joblib
+```
+
+CSV files should include `review_text` and optionally `sentiment` for training.
+
+## Test
+
+```bash
 pip install -r requirements.txt
+pytest -q
+ruff check app ml dashboard tests
 ```
 
-Launch the Streamlit dashboard:
-
-```powershell
-streamlit run app.py
-```
-
-Train a model:
-
-```powershell
-python scripts/train_model.py --data data/sample_reviews.csv --model-out models/sentiment_model.json
-```
-
-Evaluate it:
-
-```powershell
-python scripts/evaluate.py --data data/sample_reviews.csv --model models/sentiment_model.json
-```
-
-Predict one review:
-
-```powershell
-python scripts/predict.py --model models/sentiment_model.json --text "The delivery was late but the product quality is excellent."
-```
-
-## Dataset Format
-
-CSV files should include:
-
-- `review_text`: customer review text
-- `sentiment`: one of `positive`, `negative`, or `neutral`
-
-Extra columns such as `rating`, `author`, `product_id`, and `review_date` are allowed.
-
-## Optional API Sentiment
-
-Set these in `.env` or your shell if you want to use an OpenAI-compatible API client:
+## CI/CD Flow
 
 ```text
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_API_KEY=your_api_key
-OPENAI_MODEL=gpt-4o-mini
+Developer pushes to main
+  -> GitHub Actions installs dependencies
+  -> Runs Ruff and Pytest
+  -> Builds Docker image
+  -> Pushes latest and SHA tags to AWS ECR
+  -> SSHes into EC2
+  -> Pulls latest image
+  -> Restarts Docker Compose services
 ```
 
-The local model is best for a clean portfolio demo. The API client is useful for bootstrapping labels, summarizing feedback, and comparing local predictions against an LLM.
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for AWS setup, IAM, EC2, ECR, CloudWatch, HTTPS, and GitHub secrets.

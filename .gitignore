@@ -5,7 +5,13 @@ venv/
 .env
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
 models/*.json
 !models/.gitkeep
+ml/saved_models/*.joblib
+!ml/saved_models/.gitkeep
+data/uploads/
 data/raw/
 data/processed/
+.coverage
+htmlcov/

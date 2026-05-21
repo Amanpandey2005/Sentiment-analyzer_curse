@@ -1,0 +1,16 @@
+.git
+.github
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.venv
+venv
+__pycache__
+*.pyc
+.env
+data/uploads
+models
+ml/saved_models/*.joblib
+test_sentiment.db
+htmlcov
+.coverage
