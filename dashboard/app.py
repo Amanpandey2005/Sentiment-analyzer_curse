@@ -1,4 +1,4 @@
-"""Streamlit analytics dashboard for the sentiment API."""
+"""Streamlit analytics dashboard for the sentiment platform."""
 
 from __future__ import annotations
 
@@ -10,31 +10,54 @@ import plotly.express as px
 import requests
 import streamlit as st
 
-API_URL = os.getenv("API_URL", "http://api:8000").rstrip("/")
+from app.services.model_service import get_model_service
+
+API_URL = os.getenv("API_URL", "").rstrip("/")
 REQUEST_TIMEOUT = 10
 
 st.set_page_config(page_title="Sentiment Operations Dashboard", page_icon="chart_with_upwards_trend", layout="wide")
 
 
+def api_enabled() -> bool:
+    return bool(API_URL)
+
+
 def api_get(path: str) -> dict[str, Any]:
+    if not api_enabled():
+        raise requests.RequestException("API_URL is not configured")
     response = requests.get(f"{API_URL}{path}", timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
     return response.json()
 
 
 def api_post(path: str, **kwargs: Any) -> dict[str, Any]:
+    if not api_enabled():
+        raise requests.RequestException("API_URL is not configured")
     response = requests.post(f"{API_URL}{path}", timeout=30, **kwargs)
     response.raise_for_status()
     return response.json()
 
 
+@st.cache_resource
+def local_model():
+    return get_model_service()
+
+
+def local_predict(review_text: str) -> dict[str, Any]:
+    return local_model().predict(review_text)
+
+
 def render_status() -> None:
-    try:
-        health = api_get("/health")
-        status = health["status"]
-    except requests.RequestException:
-        health = {"status": "offline", "database": "unknown", "redis": "unknown", "model_loaded": False}
-        status = "offline"
+    if api_enabled():
+        try:
+            health = api_get("/health")
+            status = health["status"]
+        except requests.RequestException:
+            health = {"status": "offline", "database": "unknown", "redis": "unknown", "model_loaded": False}
+            status = "offline"
+    else:
+        health = {"status": "local", "database": "disabled", "redis": "disabled", "model_loaded": True}
+        status = "local"
 
     cols = st.columns(4)
     cols[0].metric("API", status.upper())
@@ -47,11 +70,14 @@ def render_single_prediction() -> None:
     st.subheader("Live Prediction")
     review_text = st.text_area("Review text", height=120, placeholder="Paste a customer review...")
     if st.button("Predict", type="primary", use_container_width=True) and review_text.strip():
-        try:
-            result = api_post("/predict", json={"review_text": review_text})
-        except requests.RequestException as exc:
-            st.error(f"Prediction failed: {exc}")
-            return
+        if api_enabled():
+            try:
+                result = api_post("/predict", json={"review_text": review_text})
+            except requests.RequestException as exc:
+                st.warning(f"API unavailable, using local Streamlit model. Details: {exc}")
+                result = local_predict(review_text)
+        else:
+            result = local_predict(review_text)
         left, right = st.columns([1, 2])
         left.metric("Sentiment", result["sentiment"].title())
         left.metric("Confidence", f"{result['confidence']:.1%}")
@@ -68,19 +94,39 @@ def render_csv_upload() -> None:
     st.subheader("CSV Upload")
     uploaded = st.file_uploader("Upload customer review CSV", type=["csv"])
     if uploaded is not None and st.button("Analyze CSV", use_container_width=True):
-        try:
-            result = api_post(
-                "/upload-csv",
-                files={"file": (uploaded.name, uploaded.getvalue(), "text/csv")},
-            )
-        except requests.RequestException as exc:
-            st.error(f"Upload failed: {exc}")
-            return
-        predictions = pd.DataFrame(result["predictions"])
+        if api_enabled():
+            try:
+                result = api_post(
+                    "/upload-csv",
+                    files={"file": (uploaded.name, uploaded.getvalue(), "text/csv")},
+                )
+                predictions = pd.DataFrame(result["predictions"])
+            except requests.RequestException as exc:
+                st.warning(f"API upload unavailable, using local Streamlit model. Details: {exc}")
+                predictions = predict_uploaded_csv(uploaded)
+        else:
+            predictions = predict_uploaded_csv(uploaded)
         st.dataframe(predictions, use_container_width=True, hide_index=True)
 
 
+def predict_uploaded_csv(uploaded: Any) -> pd.DataFrame:
+    df = pd.read_csv(uploaded)
+    if "review_text" not in df.columns:
+        st.error("CSV must contain a review_text column.")
+        return pd.DataFrame()
+    rows = [local_predict(text) for text in df["review_text"].dropna().astype(str) if text.strip()]
+    return pd.DataFrame(rows)
+
+
 def render_analytics() -> None:
+    if not api_enabled():
+        st.subheader("Analytics")
+        st.info(
+            "Analytics history needs the FastAPI backend and PostgreSQL. "
+            "Single review and CSV predictions work here."
+        )
+        return
+
     try:
         analytics = api_get("/analytics")
     except requests.RequestException as exc:

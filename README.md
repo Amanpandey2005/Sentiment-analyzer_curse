@@ -65,6 +65,14 @@ Services:
 
 The API trains `ml/saved_models/sentiment_model.joblib` from `data/sample_reviews.csv` automatically if the artifact is missing.
 
+## Streamlit Cloud
+
+Use `dashboard/app.py` as the Streamlit Cloud main file. If you do not configure `API_URL`, the app runs predictions locally inside Streamlit Cloud. Set `API_URL` only when the FastAPI backend is deployed separately, for example on AWS EC2:
+
+```toml
+API_URL = "https://your-api-domain"
+```
+
 ## API Examples
 
 ```bash
